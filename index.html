@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internet World - Online Utilities</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">🌐 Internet World</h1>
+                <p class="tagline">Your All-in-One Internet Utilities Platform</p>
+            </div>
+        </header>
+
+        <nav class="nav-tabs">
+            <button class="tab-btn active" data-tab="ip-checker">IP Checker</button>
+            <button class="tab-btn" data-tab="speedtest">Speed Test</button>
+            <button class="tab-btn" data-tab="json-formatter">JSON Formatter</button>
+            <button class="tab-btn" data-tab="url-tools">URL Tools</button>
+            <button class="tab-btn" data-tab="base64">Base64</button>
+            <button class="tab-btn" data-tab="password-gen">Password Gen</button>
+            <button class="tab-btn" data-tab="text-tools">Text Tools</button>
+        </nav>
+
+        <main class="main-content">
+            <!-- IP Checker Tab -->
+            <section id="ip-checker" class="tab-content active">
+                <div class="card">
+                    <h2>🔍 IP Address Checker</h2>
+                    <div class="ip-display" id="ip-display">
+                        <div class="loading">Checking your IP address...</div>
+                    </div>
+                    <button class="btn-primary" id="refresh-ip">Refresh</button>
+                </div>
+            </section>
+
+            <!-- Speed Test Tab -->
+            <section id="speedtest" class="tab-content">
+                <div class="card">
+                    <h2>⚡ Internet Speed Test</h2>
+                    <div class="speed-test-container">
+                        <div class="speedometer-wrapper">
+                            <div class="speedometer">
+                                <svg class="speedometer-svg" viewBox="0 0 300 180">
+                                    <!-- Background arc -->
+                                    <path d="M 50 150 A 100 100 0 0 1 250 150" 
+                                          fill="none" 
+                                          stroke="rgba(255,255,255,0.1)" 
+                                          stroke-width="12" 
+                                          stroke-linecap="round"/>
+                                    
+                                    <!-- Speed markings -->
+                                    <g class="speed-markings">
+                                        <!-- Major ticks -->
+                                        <line x1="60" y1="140" x2="60" y2="125" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+                                        <line x1="100" y1="60" x2="100" y2="50" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+                                        <line x1="240" y1="140" x2="240" y2="125" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+                                        
+                                        <!-- Minor ticks -->
+                                        <line x1="80" y1="132" x2="80" y2="125" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                                        <line x1="120" y1="90" x2="120" y2="85" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                                        <line x1="150" y1="75" x2="150" y2="70" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                                        <line x1="180" y1="90" x2="180" y2="85" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                                        <line x1="220" y1="132" x2="220" y2="125" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                                    </g>
+                                    
+                                    <!-- Speed labels -->
+                                    <text x="60" y="120" fill="rgba(255,255,255,0.5)" font-size="12" text-anchor="middle">0</text>
+                                    <text x="100" y="45" fill="rgba(255,255,255,0.5)" font-size="12" text-anchor="middle">100</text>
+                                    <text x="240" y="120" fill="rgba(255,255,255,0.5)" font-size="12" text-anchor="middle">200</text>
+                                    
+                                    <!-- Progress arc (green to yellow to red) -->
+                                    <defs>
+                                        <linearGradient id="speedGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                            <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+                                            <stop offset="50%" style="stop-color:#f59e0b;stop-opacity:1" />
+                                            <stop offset="100%" style="stop-color:#ef4444;stop-opacity:1" />
+                                        </linearGradient>
+                                    </defs>
+                                    <path id="speed-progress-arc" 
+                                          d="M 50 150 A 100 100 0 0 1 250 150" 
+                                          fill="none" 
+                                          stroke="url(#speedGradient)" 
+                                          stroke-width="12" 
+                                          stroke-linecap="round"
+                                          stroke-dasharray="314"
+                                          stroke-dashoffset="314"/>
+                                    
+                                    <!-- Needle -->
+                                    <g id="speedometer-needle" transform="rotate(0 150 150)">
+                                        <line x1="150" y1="150" x2="150" y2="70" 
+                                              stroke="#6366f1" 
+                                              stroke-width="3" 
+                                              stroke-linecap="round"/>
+                                        <circle cx="150" cy="150" r="6" fill="#6366f1"/>
+                                    </g>
+                                </svg>
+                                <div class="speed-value-display">
+                                    <div class="speed-number-large" id="speed-number">0</div>
+                                    <div class="speed-unit-large">Mbps</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="speed-stats">
+                            <div class="stat-box">
+                                <div class="stat-label">Download</div>
+                                <div class="stat-value" id="download-speed">0 Mbps</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-label">Upload</div>
+                                <div class="stat-value" id="upload-speed">0 Mbps</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-label">Ping</div>
+                                <div class="stat-value" id="ping-value">0 ms</div>
+                            </div>
+                        </div>
+                        <button class="btn-primary" id="start-speedtest">Start Speed Test</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- JSON Formatter Tab -->
+            <section id="json-formatter" class="tab-content">
+                <div class="card">
+                    <h2>📝 JSON Formatter & Validator</h2>
+                    <div class="json-container">
+                        <div class="input-group">
+                            <label for="json-input">Enter JSON:</label>
+                            <textarea id="json-input" class="json-textarea" placeholder='{"name": "example", "value": 123}'></textarea>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-secondary" id="format-json">Format</button>
+                            <button class="btn-secondary" id="minify-json">Minify</button>
+                            <button class="btn-secondary" id="validate-json">Validate</button>
+                            <button class="btn-secondary" id="clear-json">Clear</button>
+                        </div>
+                        <div class="input-group">
+                            <label for="json-output">Formatted Output:</label>
+                            <textarea id="json-output" class="json-textarea" readonly></textarea>
+                        </div>
+                        <div id="json-error" class="error-message"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- URL Tools Tab -->
+            <section id="url-tools" class="tab-content">
+                <div class="card">
+                    <h2>🔗 URL Encoder/Decoder</h2>
+                    <div class="url-container">
+                        <div class="input-group">
+                            <label for="url-input">Enter URL or Text:</label>
+                            <textarea id="url-input" class="url-textarea" placeholder="https://example.com/path?query=value"></textarea>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-secondary" id="encode-url">Encode</button>
+                            <button class="btn-secondary" id="decode-url">Decode</button>
+                            <button class="btn-secondary" id="clear-url">Clear</button>
+                        </div>
+                        <div class="input-group">
+                            <label for="url-output">Result:</label>
+                            <textarea id="url-output" class="url-textarea" readonly></textarea>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Base64 Tab -->
+            <section id="base64" class="tab-content">
+                <div class="card">
+                    <h2>🔐 Base64 Encoder/Decoder</h2>
+                    <div class="base64-container">
+                        <div class="input-group">
+                            <label for="base64-input">Enter Text:</label>
+                            <textarea id="base64-input" class="base64-textarea" placeholder="Enter text to encode or decode"></textarea>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-secondary" id="encode-base64">Encode</button>
+                            <button class="btn-secondary" id="decode-base64">Decode</button>
+                            <button class="btn-secondary" id="clear-base64">Clear</button>
+                        </div>
+                        <div class="input-group">
+                            <label for="base64-output">Result:</label>
+                            <textarea id="base64-output" class="base64-textarea" readonly></textarea>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Password Generator Tab -->
+            <section id="password-gen" class="tab-content">
+                <div class="card">
+                    <h2>🔑 Password Generator</h2>
+                    <div class="password-container">
+                        <div class="input-group">
+                            <label for="password-length">Length: <span id="length-value">16</span></label>
+                            <input type="range" id="password-length" min="8" max="64" value="16" class="slider">
+                        </div>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" id="include-uppercase" checked> Uppercase (A-Z)</label>
+                            <label><input type="checkbox" id="include-lowercase" checked> Lowercase (a-z)</label>
+                            <label><input type="checkbox" id="include-numbers" checked> Numbers (0-9)</label>
+                            <label><input type="checkbox" id="include-symbols" checked> Symbols (!@#$%...)</label>
+                        </div>
+                        <button class="btn-primary" id="generate-password">Generate Password</button>
+                        <div class="input-group">
+                            <label for="generated-password">Generated Password:</label>
+                            <div class="password-display">
+                                <input type="text" id="generated-password" class="password-input" readonly>
+                                <button class="btn-icon" id="copy-password" title="Copy">📋</button>
+                            </div>
+                        </div>
+                        <div id="password-strength" class="strength-meter"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Text Tools Tab -->
+            <section id="text-tools" class="tab-content">
+                <div class="card">
+                    <h2>✏️ Text Case Converter</h2>
+                    <div class="text-container">
+                        <div class="input-group">
+                            <label for="text-input">Enter Text:</label>
+                            <textarea id="text-input" class="text-textarea" placeholder="Enter your text here"></textarea>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-secondary" id="uppercase">UPPERCASE</button>
+                            <button class="btn-secondary" id="lowercase">lowercase</button>
+                            <button class="btn-secondary" id="title-case">Title Case</button>
+                            <button class="btn-secondary" id="sentence-case">Sentence case</button>
+                            <button class="btn-secondary" id="invert-case">InVeRt CaSe</button>
+                            <button class="btn-secondary" id="clear-text">Clear</button>
+                        </div>
+                        <div class="input-group">
+                            <label for="text-output">Converted Text:</label>
+                            <textarea id="text-output" class="text-textarea" readonly></textarea>
+                        </div>
+                        <div class="text-stats">
+                            <span>Characters: <strong id="char-count">0</strong></span>
+                            <span>Words: <strong id="word-count">0</strong></span>
+                            <span>Lines: <strong id="line-count">0</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>© 2024 Internet World - Free Internet Utilities</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+

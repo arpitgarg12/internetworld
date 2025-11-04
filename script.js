@@ -30,8 +30,33 @@ async function checkIPAddress() {
     ipDisplay.innerHTML = '<div class="loading">Checking your IP address...</div>';
 
     try {
-        // Try multiple APIs for reliability - prioritize APIs with location data
+        // Try multiple APIs for reliability - prefer IPv4-specific endpoints first
+        // Parsers should accept either object (from JSON) or string (from plain-text)
         const apis = [
+            // IPv4-only JSON endpoint
+            {
+                url: 'https://ipv4.ip.sb/jsonip',
+                parser: (data) => ({
+                    ip: (typeof data === 'string' ? data.trim() : data.ip),
+                    city: 'N/A',
+                    region: 'N/A',
+                    country: 'N/A',
+                    isp: 'N/A',
+                    timezone: 'N/A'
+                })
+            },
+            // IPv4-only plain text endpoint
+            {
+                url: 'https://ipv4.icanhazip.com/',
+                parser: (data) => ({
+                    ip: (typeof data === 'string' ? data.trim() : data.ip),
+                    city: 'N/A',
+                    region: 'N/A',
+                    country: 'N/A',
+                    isp: 'N/A',
+                    timezone: 'N/A'
+                })
+            },
             {
                 url: 'https://ipapi.co/json/',
                 parser: (data) => ({
@@ -62,7 +87,7 @@ async function checkIPAddress() {
                     region: data.region || data.region_code || 'N/A',
                     country: data.country || 'N/A',
                     isp: data.connection?.isp || data.isp || 'N/A',
-                    timezone: data.timezone?.id || data.timezone || 'N/A'
+                    timezone: data.timezone?.id || data.timezone || 'N/A'        
                 })
             },
             {
@@ -79,42 +104,53 @@ async function checkIPAddress() {
         ];
 
         let ipData = null;
+        const ipv4Regex = /^(25[0-5]|2[0-4]\d|1?\d{1,2})(\.(25[0-5]|2[0-4]\d|1?\d{1,2})){3}$/;
         for (const api of apis) {
             try {
                 const response = await fetch(api.url, {
                     method: 'GET',
                     headers: {
-                        'Accept': 'application/json'
+                        'Accept': 'application/json, text/plain'
                     },
                     mode: 'cors'
                 });
-                
+
                 if (!response.ok) {
                     console.log(`API ${api.url} returned status ${response.status}`);
                     continue;
                 }
-                
-                const data = await response.json();
-                
-                // Check if API returned error
-                if (data.status === 'fail' || data.error) {
+
+                // Try to parse JSON; if that fails, fall back to text
+                let data;
+                try {
+                    data = await response.json();
+                } catch (jsonErr) {
+                    try {
+                        data = await response.text();
+                    } catch (textErr) {
+                        console.log(`Failed to read response from ${api.url}`);
+                        continue;
+                    }
+                }
+
+                // If API returned an explicit error field, skip
+                if (data && typeof data === 'object' && (data.status === 'fail' || data.error)) {
                     console.log(`API ${api.url} returned error:`, data.message || data.error);
                     continue;
                 }
-                
+
                 ipData = api.parser(data);
-                
-                // If we got location data, use it; otherwise try next API
-                if (ipData.city !== 'N/A' && ipData.city !== null && ipData.city !== undefined) {
-                    break;
+
+                // Ensure we got an IPv4 address; if not, try next API
+                if (!ipData || !ipData.ip || !ipv4Regex.test(String(ipData.ip).trim())) {
+                    console.log(`API ${api.url} returned non-IPv4 or invalid IP:`, ipData && ipData.ip);
+                    continue;
                 }
-                
-                // If this is the last API, use it anyway
-                if (api === apis[apis.length - 1]) {
-                    break;
-                }
+
+                // Accept the result (we prefer any valid IPv4 even if city is N/A)
+                break;
             } catch (e) {
-                console.log(`API ${api.url} failed:`, e.message);
+                console.log(`API ${api.url} failed:`, e && e.message ? e.message : e);
                 continue;
             }
         }
@@ -228,51 +264,44 @@ async function measureDownloadSpeed(onProgress) {
         { size: 2 * 1024 * 1024, url: 'https://speed.cloudflare.com/__down?bytes=' },
         { size: 5 * 1024 * 1024, url: 'https://speed.cloudflare.com/__down?bytes=' }
     ];
-    
+
     const speeds = [];
-    
+
     for (const test of testSizes) {
         try {
             const startTime = performance.now();
             const response = await fetch(test.url + test.size + '&nocache=' + Date.now());
-            
             if (!response.ok) continue;
-            
+
             const reader = response.body.getReader();
             let receivedLength = 0;
-            const chunks = [];
-            
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                
-                chunks.push(value);
                 receivedLength += value.length;
-                
-                // Update progress
+
                 const elapsed = (performance.now() - startTime) / 1000;
-                if (elapsed > 0) {
+                if (elapsed > 0 && onProgress) {
                     const currentSpeed = (receivedLength * 8) / (elapsed * 1000000);
-                    if (onProgress) onProgress(currentSpeed);
+                    onProgress(currentSpeed);
                 }
             }
-            
-            const endTime = performance.now();
-            const duration = (endTime - startTime) / 1000;
+
+            const duration = (performance.now() - startTime) / 1000;
             const speedMbps = (receivedLength * 8) / (duration * 1000000);
             speeds.push(speedMbps);
         } catch (e) {
-            console.log('Speed test error:', e);
+            // Ignore and continue with next test size
             continue;
         }
     }
-    
+
     if (speeds.length > 0) {
-        // Return average of successful tests
         return speeds.reduce((a, b) => a + b, 0) / speeds.length;
     }
-    
-    // Fallback: try simple measurement
+
+    // Fallback: try a single fetch and measure
     try {
         const fileSize = 2 * 1024 * 1024;
         const startTime = performance.now();

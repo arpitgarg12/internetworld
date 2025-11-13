@@ -17,12 +17,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Initialize JSON Tab Navigation
+    initializeJsonTabs();
+
     // Initialize IP Checker
     checkIPAddress();
     
     // Initialize text counter
     initializeTextCounter();
 });
+
+// JSON Tab Navigation
+function initializeJsonTabs() {
+    const jsonTabBtns = document.querySelectorAll('.json-tab-btn');
+    const jsonTabContents = document.querySelectorAll('.json-tab-content');
+
+    jsonTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetTab = btn.getAttribute('data-json-tab');
+            
+            // Remove active class from all tabs and contents
+            jsonTabBtns.forEach(b => b.classList.remove('active'));
+            jsonTabContents.forEach(c => c.classList.remove('active'));
+            
+            // Add active class to clicked tab and corresponding content
+            btn.classList.add('active');
+            document.getElementById(targetTab).classList.add('active');
+        });
+    });
+}
 
 // IP Address Checker
 async function checkIPAddress() {
@@ -206,177 +229,274 @@ document.getElementById('start-speedtest')?.addEventListener('click', async () =
     
     speedTestRunning = true;
     const btn = document.getElementById('start-speedtest');
-    btn.textContent = 'Testing...';
+    const originalText = btn.textContent;
+    btn.textContent = '⏳ Testing... Please wait';
     btn.disabled = true;
 
     // Reset values
-    document.getElementById('download-speed').textContent = '0 Mbps';
-    document.getElementById('upload-speed').textContent = '0 Mbps';
-    document.getElementById('ping-value').textContent = '0 ms';
-    updateSpeedometer(0, 'download');
+    document.getElementById('download-speed').textContent = '⏳ Testing...';
+    document.getElementById('upload-speed').textContent = '⏳ Testing...';
+    document.getElementById('ping-value').textContent = '⏳ Testing...';
+    updateSpeedometer(0);
 
-    // Measure Ping
-    const ping = await measurePing();
-    document.getElementById('ping-value').textContent = `${ping} ms`;
+    try {
+        // Measure Ping first
+        document.getElementById('ping-value').textContent = '⏳ Testing ping...';
+        const ping = await measurePing();
+        document.getElementById('ping-value').textContent = `${ping} ms`;
 
-    // Measure Download Speed with progress updates
-    const downloadSpeed = await measureDownloadSpeed((speed) => {
-        updateSpeedometer(speed, 'download');
-        document.getElementById('download-speed').textContent = `${speed.toFixed(2)} Mbps`;
-    });
-    document.getElementById('download-speed').textContent = `${downloadSpeed.toFixed(2)} Mbps`;
-    updateSpeedometer(downloadSpeed, 'download');
+        // Measure Download Speed
+        document.getElementById('download-speed').textContent = '⏳ Testing download...';
+        updateSpeedometer(0);
+        const downloadSpeed = await measureDownloadSpeed();
+        document.getElementById('download-speed').textContent = `${downloadSpeed.toFixed(2)} Mbps`;
+        updateSpeedometer(Math.min(downloadSpeed, 200));
 
-    // Measure Upload Speed
-    const uploadSpeed = await measureUploadSpeed((speed) => {
-        document.getElementById('upload-speed').textContent = `${speed.toFixed(2)} Mbps`;
-    });
-    document.getElementById('upload-speed').textContent = `${uploadSpeed.toFixed(2)} Mbps`;
+        // Measure Upload Speed with activity indicator
+        document.getElementById('upload-speed').textContent = '⏳ Testing upload...';
+        updateSpeedometer(0);
+        
+        const uploadSpeed = await measureUploadSpeed();
+        document.getElementById('upload-speed').textContent = `${uploadSpeed.toFixed(2)} Mbps`;
+        updateSpeedometer(Math.min(uploadSpeed, 200));
+        
+        // Reset speedometer after a brief delay
+        setTimeout(() => {
+            updateSpeedometer(0);
+        }, 1500);
+        
+    } catch (error) {
+        console.error('Speed test error:', error);
+        document.getElementById('download-speed').textContent = '❌ Error';
+        document.getElementById('upload-speed').textContent = '❌ Error';
+        updateSpeedometer(0);
+    }
 
     speedTestRunning = false;
-    btn.textContent = 'Start Speed Test';
+    btn.textContent = originalText;
     btn.disabled = false;
 });
 
 async function measurePing() {
     const times = [];
-    for (let i = 0; i < 3; i++) {
+    const pingAttempts = 5;
+    
+    for (let i = 0; i < pingAttempts; i++) {
         try {
             const startTime = performance.now();
-            await fetch('https://www.google.com/favicon.ico?' + Date.now(), {
+            await fetch('https://www.google.com/favicon.ico?' + Math.random(), {
                 method: 'HEAD',
-                cache: 'no-cache'
+                cache: 'no-cache',
+                mode: 'no-cors',
+                timeout: 5000
             });
-            times.push(performance.now() - startTime);
+            const pingTime = performance.now() - startTime;
+            if (pingTime > 0) {
+                times.push(pingTime);
+            }
         } catch (e) {
-            // Continue to next attempt
+            // Try alternative ping endpoint
+            try {
+                const startTime = performance.now();
+                await fetch('https://cloudflare.com?' + Math.random(), {
+                    method: 'HEAD',
+                    cache: 'no-cache',
+                    mode: 'no-cors',
+                    timeout: 5000
+                });
+                const pingTime = performance.now() - startTime;
+                if (pingTime > 0) {
+                    times.push(pingTime);
+                }
+            } catch (err) {
+                // Continue to next attempt
+            }
         }
     }
+    
     if (times.length > 0) {
-        return Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+        // Sort and remove outliers
+        times.sort((a, b) => a - b);
+        const median = times[Math.floor(times.length / 2)];
+        return Math.round(median);
     }
     return 0;
 }
 
-async function measureDownloadSpeed(onProgress) {
-    const testSizes = [
-        { size: 1 * 1024 * 1024, url: 'https://speed.cloudflare.com/__down?bytes=' },
-        { size: 2 * 1024 * 1024, url: 'https://speed.cloudflare.com/__down?bytes=' },
-        { size: 5 * 1024 * 1024, url: 'https://speed.cloudflare.com/__down?bytes=' }
-    ];
+async function measureDownloadSpeed() {
+    const testDuration = 8000; // 8 seconds test
+    const startTime = performance.now();
+    let totalBytes = 0;
+    let updateCount = 0;
 
-    const speeds = [];
+    try {
+        const response = await fetch(
+            `https://speed.cloudflare.com/__down?bytes=100000000&nocache=${Math.random()}`,
+            { cache: 'no-cache' }
+        );
+        
+        if (!response.ok) throw new Error('Download test failed');
 
-    for (const test of testSizes) {
-        try {
-            const startTime = performance.now();
-            const response = await fetch(test.url + test.size + '&nocache=' + Date.now());
-            if (!response.ok) continue;
+        const reader = response.body.getReader();
+        let lastUpdateTime = startTime;
 
-            const reader = response.body.getReader();
-            let receivedLength = 0;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            totalBytes += value.length;
+            const currentTime = performance.now();
+            const elapsedTime = currentTime - startTime;
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                receivedLength += value.length;
-
-                const elapsed = (performance.now() - startTime) / 1000;
-                if (elapsed > 0 && onProgress) {
-                    const currentSpeed = (receivedLength * 8) / (elapsed * 1000000);
-                    onProgress(currentSpeed);
+            // Update display every 400ms for smooth animation
+            if (currentTime - lastUpdateTime > 400) {
+                if (elapsedTime > 500) { // Start showing speed after 0.5s
+                    const seconds = elapsedTime / 1000;
+                    const speedMbps = (totalBytes * 8) / (seconds * 1000000);
+                    updateSpeedometer(Math.min(speedMbps, 200));
+                    updateCount++;
                 }
+                lastUpdateTime = currentTime;
             }
 
-            const duration = (performance.now() - startTime) / 1000;
-            const speedMbps = (receivedLength * 8) / (duration * 1000000);
-            speeds.push(speedMbps);
-        } catch (e) {
-            // Ignore and continue with next test size
-            continue;
+            // Stop after test duration or if we have enough data
+            if (elapsedTime > testDuration) {
+                reader.cancel();
+                break;
+            }
         }
-    }
 
-    if (speeds.length > 0) {
-        return speeds.reduce((a, b) => a + b, 0) / speeds.length;
-    }
-
-    // Fallback: try a single fetch and measure
-    try {
-        const fileSize = 2 * 1024 * 1024;
-        const startTime = performance.now();
-        const response = await fetch(`https://speed.cloudflare.com/__down?bytes=${fileSize}&nocache=${Date.now()}`);
-        const blob = await response.blob();
-        const endTime = performance.now();
-        const duration = (endTime - startTime) / 1000;
-        return (blob.size * 8) / (duration * 1000000);
-    } catch {
+        // Final calculation
+        const totalSeconds = (performance.now() - startTime) / 1000;
+        const finalSpeed = (totalBytes * 8) / (totalSeconds * 1000000);
+        
+        console.log(`Download: ${totalBytes} bytes in ${totalSeconds.toFixed(2)}s = ${finalSpeed.toFixed(2)} Mbps`);
+        return Math.max(0.1, finalSpeed);
+    } catch (error) {
+        console.log('Download test error:', error);
         return 0;
     }
 }
 
-async function measureUploadSpeed(onProgress) {
-    const testSizes = [0.5 * 1024 * 1024, 1 * 1024 * 1024];
-    const speeds = [];
-    
-    for (const size of testSizes) {
-        try {
-            const testData = new Uint8Array(size);
-            const blob = new Blob([testData]);
-            const formData = new FormData();
-            formData.append('file', blob);
-            
-            const startTime = performance.now();
-            const response = await fetch('https://httpbin.org/post', {
-                method: 'POST',
-                body: formData,
-                cache: 'no-cache'
-            });
-            
-            if (!response.ok) continue;
-            
-            await response.json();
-            const endTime = performance.now();
-            const duration = (endTime - startTime) / 1000;
-            const speedMbps = (size * 8) / (duration * 1000000);
-            speeds.push(speedMbps);
-            
-            if (onProgress) onProgress(speedMbps);
-        } catch (e) {
-            console.log('Upload test error:', e);
-            continue;
+async function measureUploadSpeed() {
+    try {
+        // Use multiple small uploads to simulate a real test
+        const chunkSize = 256 * 1024; // 256KB chunks
+        const totalChunks = 8; // 8 chunks = 2MB total
+        const startTime = performance.now();
+        let totalBytes = 0;
+
+        for (let i = 0; i < totalChunks; i++) {
+            try {
+                const chunkData = new Uint8Array(chunkSize);
+                // Fill with random data to prevent compression
+                for (let j = 0; j < chunkSize; j += 1024) {
+                    chunkData[j] = Math.floor(Math.random() * 256);
+                }
+
+                const blob = new Blob([chunkData], { type: 'application/octet-stream' });
+                const formData = new FormData();
+                formData.append('file', blob, `chunk_${i}.bin`);
+
+                const response = await fetch('https://httpbin.org/post', {
+                    method: 'POST',
+                    body: formData,
+                    cache: 'no-cache'
+                });
+
+                if (response.ok) {
+                    totalBytes += chunkSize;
+                    const elapsed = (performance.now() - startTime) / 1000;
+                    
+                    // Show progress on speedometer
+                    if (elapsed > 0.5 && totalBytes > 0) {
+                        const currentSpeed = (totalBytes * 8) / (elapsed * 1000000);
+                        updateSpeedometer(Math.min(currentSpeed, 200));
+                    }
+                }
+            } catch (chunkError) {
+                console.log(`Chunk ${i} upload failed:`, chunkError);
+                if (totalBytes === 0) {
+                    // If first chunk failed, try smaller upload
+                    break;
+                }
+            }
         }
+
+        if (totalBytes > 0) {
+            const totalTime = (performance.now() - startTime) / 1000;
+            const uploadSpeed = (totalBytes * 8) / (totalTime * 1000000);
+            console.log(`Upload: ${totalBytes} bytes in ${totalTime.toFixed(2)}s = ${uploadSpeed.toFixed(2)} Mbps`);
+            return Math.max(0.1, uploadSpeed);
+        }
+
+        // Fallback: single smaller upload
+        const fallbackSize = 512 * 1024; // 512KB
+        const fallbackData = new Uint8Array(fallbackSize);
+        const blob = new Blob([fallbackData], { type: 'application/octet-stream' });
+        const formData = new FormData();
+        formData.append('file', blob, 'test.bin');
+
+        const startTime2 = performance.now();
+        const response = await fetch('https://httpbin.org/post', {
+            method: 'POST',
+            body: formData,
+            cache: 'no-cache'
+        });
+
+        if (response.ok) {
+            const duration = (performance.now() - startTime2) / 1000;
+            if (duration > 0.1) {
+                const uploadSpeed = (fallbackSize * 8) / (duration * 1000000);
+                console.log(`Fallback upload: ${fallbackSize} bytes in ${duration.toFixed(2)}s = ${uploadSpeed.toFixed(2)} Mbps`);
+                return Math.max(0.1, uploadSpeed);
+            }
+        }
+
+        return 0;
+    } catch (error) {
+        console.log('Upload test failed:', error);
+        return 0;
     }
-    
-    if (speeds.length > 0) {
-        return speeds.reduce((a, b) => a + b, 0) / speeds.length;
-    }
-    return 0;
 }
 
-function updateSpeedometer(speed, type) {
+function updateSpeedometer(speed) {
     const needle = document.getElementById('speedometer-needle');
     const number = document.getElementById('speed-number');
     const progressArc = document.getElementById('speed-progress-arc');
     const maxSpeed = 200; // Max speed for gauge (200 Mbps)
     
+    // Clamp speed between 0 and maxSpeed
+    const clampedSpeed = Math.max(0, Math.min(speed, maxSpeed));
+    
     // Calculate angle: -90° to 90° (speedometer goes from left to right)
     // -90° = 0 Mbps, 0° = 100 Mbps, 90° = 200 Mbps
-    const angle = Math.min((speed / maxSpeed) * 180 - 90, 90);
+    const angle = (clampedSpeed / maxSpeed) * 180 - 90;
     
     if (needle) {
+        needle.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
         needle.setAttribute('transform', `rotate(${angle} 150 150)`);
     }
     
     if (number) {
-        number.textContent = speed.toFixed(1);
+        number.textContent = clampedSpeed.toFixed(1);
+        number.style.transition = 'color 0.3s ease';
+        // Color change based on speed
+        if (clampedSpeed < 50) {
+            number.style.color = '#ef4444'; // Red for slow
+        } else if (clampedSpeed < 100) {
+            number.style.color = '#f59e0b'; // Orange for medium
+        } else {
+            number.style.color = '#7c3aed'; // Purple for fast
+        }
     }
     
-    // Update progress arc
+    // Update progress arc smoothly
     if (progressArc) {
         const arcLength = 314; // Approximate arc length
-        const progress = Math.min(speed / maxSpeed, 1);
-        const offset = arcLength - (progress * arcLength);
+        const progress = clampedSpeed / maxSpeed;
+        const offset = arcLength * (1 - progress);
+        progressArc.style.transition = 'stroke-dashoffset 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
         progressArc.style.strokeDashoffset = offset;
     }
 }
@@ -629,4 +749,184 @@ function updateTextStats() {
     document.getElementById('word-count').textContent = text.trim() ? text.trim().split(/\s+/).length : 0;
     document.getElementById('line-count').textContent = text ? text.split('\n').length : 0;
 }
+
+
+// JSON Viewer
+let jsonTree = {};
+
+function formatJsonValue(value, depth = 0) {
+    const indent = '  '.repeat(depth);
+    const nextIndent = '  '.repeat(depth + 1);
+
+    if (value === null) {
+        return `<span class="json-null">null</span>`;
+    }
+
+    if (typeof value === 'boolean') {
+        return `<span class="json-boolean">${value}</span>`;
+    }
+
+    if (typeof value === 'number') {
+        return `<span class="json-number">${value}</span>`;
+    }
+
+    if (typeof value === 'string') {
+        return `<span class="json-string">"${escapeHtml(value)}"</span>`;
+    }
+
+    if (Array.isArray(value)) {
+        if (value.length === 0) {
+            return `<span class="json-bracket">[]</span>`;
+        }
+
+        const id = 'array-' + Math.random().toString(36).substr(2, 9);
+        let html = `<button class="json-toggle expanded" onclick="toggleJsonNode('${id}')"></button><span class="json-bracket">[</span>`;
+        html += `<div id="${id}" class="json-content">`;
+
+        value.forEach((item, index) => {
+            html += `<div class="json-tree-item">${formatJsonValue(item, depth + 1)}${index < value.length - 1 ? ',' : ''}</div>`;
+        });
+
+        html += `</div><span class="json-bracket">]</span>`;
+        return html;
+    }
+
+    if (typeof value === 'object') {
+        const keys = Object.keys(value);
+        if (keys.length === 0) {
+            return `<span class="json-bracket">{}</span>`;
+        }
+
+        const id = 'obj-' + Math.random().toString(36).substr(2, 9);
+        let html = `<button class="json-toggle expanded" onclick="toggleJsonNode('${id}')"></button><span class="json-bracket">{</span>`;
+        html += `<div id="${id}" class="json-content">`;
+
+        keys.forEach((key, index) => {
+            html += `<div class="json-tree-item"><span class="json-key">"${escapeHtml(key)}"</span>: ${formatJsonValue(value[key], depth + 1)}${index < keys.length - 1 ? ',' : ''}</div>`;
+        });
+
+        html += `</div><span class="json-bracket">}</span>`;
+        return html;
+    }
+
+    return String(value);
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+function toggleJsonNode(id) {
+    const node = document.getElementById(id);
+    const button = event.target;
+
+    if (node) {
+        node.classList.toggle('hidden');
+        button.classList.toggle('collapsed');
+        button.classList.toggle('expanded');
+    }
+}
+
+function expandAllJsonNodes() {
+    const contents = document.querySelectorAll('#json-viewer-output .json-content');
+    const buttons = document.querySelectorAll('#json-viewer-output .json-toggle');
+
+    contents.forEach(content => {
+        content.classList.remove('hidden');
+    });
+
+    buttons.forEach(button => {
+        button.classList.remove('collapsed');
+        button.classList.add('expanded');
+    });
+}
+
+function collapseAllJsonNodes() {
+    const contents = document.querySelectorAll('#json-viewer-output .json-content');
+    const buttons = document.querySelectorAll('#json-viewer-output .json-toggle');
+
+    contents.forEach(content => {
+        content.classList.add('hidden');
+    });
+
+    buttons.forEach(button => {
+        button.classList.add('collapsed');
+        button.classList.remove('expanded');
+    });
+}
+
+document.getElementById('view-json')?.addEventListener('click', () => {
+    const input = document.getElementById('json-viewer-input').value;
+    const output = document.getElementById('json-viewer-output');
+    const error = document.getElementById('json-viewer-error');
+    const emptyState = document.getElementById('json-empty-state');
+
+    try {
+        const parsed = JSON.parse(input);
+        jsonTree = parsed;
+        output.innerHTML = formatJsonValue(parsed);
+        error.classList.remove('show');
+        if (emptyState) emptyState.style.display = 'none';
+    } catch (e) {
+        error.textContent = `⚠️ Error: ${e.message}`;
+        error.classList.add('show');
+        output.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'block';
+    }
+});
+
+document.getElementById('expand-all-json')?.addEventListener('click', () => {
+    const output = document.getElementById('json-viewer-output');
+    if (output.innerHTML.trim() === '') {
+        alert('👆 Please click "View" first to parse JSON');
+        return;
+    }
+    expandAllJsonNodes();
+});
+
+document.getElementById('collapse-all-json')?.addEventListener('click', () => {
+    const output = document.getElementById('json-viewer-output');
+    if (output.innerHTML.trim() === '') {
+        alert('👆 Please click "View" first to parse JSON');
+        return;
+    }
+    collapseAllJsonNodes();
+});
+
+document.getElementById('copy-json-viewer')?.addEventListener('click', async () => {
+    const input = document.getElementById('json-viewer-input').value;
+    
+    if (!input) {
+        alert('📋 Please enter JSON first');
+        return;
+    }
+    
+    try {
+        const parsed = JSON.parse(input);
+        await navigator.clipboard.writeText(JSON.stringify(parsed, null, 2));
+        const btn = document.getElementById('copy-json-viewer');
+        const originalText = btn.textContent;
+        btn.textContent = '✅ Copied!';
+        setTimeout(() => {
+            btn.textContent = originalText;
+        }, 2000);
+    } catch (err) {
+        alert('❌ Invalid JSON - Cannot copy');
+    }
+});
+
+document.getElementById('clear-json-viewer')?.addEventListener('click', () => {
+    document.getElementById('json-viewer-input').value = '';
+    document.getElementById('json-viewer-output').innerHTML = '';
+    document.getElementById('json-viewer-error').classList.remove('show');
+    const emptyState = document.getElementById('json-empty-state');
+    if (emptyState) emptyState.style.display = 'block';
+});
 
